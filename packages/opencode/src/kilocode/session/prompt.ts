@@ -23,7 +23,17 @@ import PROMPT_PLAN from "@/session/prompt/plan.txt"
 import CODE_SWITCH from "@/session/prompt/code-switch.txt"
 
 export namespace KiloSessionPrompt {
-  const modes = ["ask", "plan"]
+  const modes = ["ask", "plan", "architect"]
+
+  function mode(name: string) {
+    return name.toLowerCase()
+  }
+
+  function planning(input: { name: string; options?: Record<string, unknown> }) {
+    const id = typeof input.options?.id === "string" ? mode(input.options.id) : undefined
+    const name = mode(input.name)
+    return id === "architect" || name === "plan" || name === "architect"
+  }
 
   /**
    * Determines whether the plan follow-up prompt should be shown.
@@ -123,7 +133,7 @@ export namespace KiloSessionPrompt {
     session: Pick<Session.Info, "permission">
   }) {
     const rules = input.session.permission ?? []
-    if (!modes.includes(input.agent.name)) return rules
+    if (!modes.includes(mode(input.agent.name))) return rules
     return Permission.merge(
       rules,
       input.agent.permission,
@@ -132,7 +142,7 @@ export namespace KiloSessionPrompt {
   }
 
   export function hardPermissions(input: { agent: { name: string; permission: Permission.Ruleset } }) {
-    if (!modes.includes(input.agent.name)) return
+    if (!modes.includes(mode(input.agent.name))) return
     return input.agent.permission
   }
 
@@ -251,23 +261,24 @@ export namespace KiloSessionPrompt {
     session: Session.Info
     userMessage: MessageV2.WithParts
   }) {
-    if (input.agent.name !== "plan" && input.agent.options?.id !== "architect") return
+    if (!planning(input.agent)) return
     // keep bind(): inside Effect.promise the project context is lost, so Instance.current throws without it
-    const plan = InstanceState.bind(() => Session.plan(input.session, Instance.current))()
+    const ctx = InstanceState.bind(() => Instance.current)()
+    const plan = Session.plan(input.session, ctx)
+    const dir = path.dirname(plan)
     const exists = await Filesystem.exists(plan)
-    if (!exists) await ensurePlanDir(path.dirname(plan))
+    if (!exists) await ensurePlanDir(dir)
     const info = exists
       ? `A plan file already exists at ${plan}. You can read it and make incremental edits using the edit tool.`
-      : `No plan file exists yet. You should create your plan at ${plan} using the write tool.`
-    const limit =
-      input.agent.name === "plan"
-        ? "This is the ONLY file you are allowed to write to or edit."
-        : "Use this as the main plan file to write or edit. Do not write or edit other files unless the user explicitly asks and your permissions allow it."
-    const planFile = `## Plan File\n${info}\n${limit}`
-    const text =
-      input.agent.name === "plan"
-        ? `${PROMPT_PLAN}\n\n${planFile}`
-        : `<system-reminder>\n${planFile} Before writing this file or calling plan_exit, ask the user to choose exactly one of: "Finalize and save the plan" or "Continue refining". If the user chooses to finalize, write the main plan to this exact file, then call plan_exit with no arguments. If the user explicitly asks for additional plan files and your permissions allow it, you may create them and reference them from the main plan.\n</system-reminder>`
+      : `No plan file exists yet. Create it in ${dir} using a concise kebab-case filename based on the plan details. Use a different plan path only if the user or project instructions explicitly specify one and your permissions allow it.`
+    const native = mode(input.agent.name) === "plan"
+    const limit = native
+      ? "This directory is the ONLY location you are allowed to write to or edit."
+      : "Use this as the main plan directory. Do not write or edit other files unless the user explicitly asks and your permissions allow it."
+    const planFile = `## Plan File\n${info}\n${limit}\nWhen finalizing, call plan_exit with the path of the plan file you wrote.`
+    const text = native
+      ? `${PROMPT_PLAN}\n\n${planFile}`
+      : `<system-reminder>\n${planFile} Before creating or updating the plan file, or calling plan_exit, ask the user to choose exactly one of: "Finalize and save the plan" or "Continue refining". If the user chooses to finalize, write the main plan file, then call plan_exit.\n</system-reminder>`
     input.userMessage.parts.push({
       id: PartID.ascending(),
       messageID: input.userMessage.info.id,

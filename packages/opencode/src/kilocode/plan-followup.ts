@@ -214,6 +214,20 @@ export namespace PlanFollowup {
     return input
   }
 
+  function planFile(messages: MessageV2.WithParts[]) {
+    const idx = messages.findLastIndex((m) => m.info.role === "user")
+    const exit = messages
+      .slice(idx + 1)
+      .flatMap((m) => m.parts)
+      .findLast(
+        (part) => part.type === "tool" && part.tool === "plan_exit" && part.state.status === "completed",
+      )
+    if (exit?.type !== "tool" || exit.state.status !== "completed") return
+    const meta = exit.state.metadata ?? {}
+    const input = exit.state.input ?? {}
+    return typeof meta.plan === "string" ? meta.plan : typeof input.path === "string" ? input.path : undefined
+  }
+
   async function resolvePlan(input: {
     assistant?: MessageV2.WithParts
     messages: MessageV2.WithParts[]
@@ -235,8 +249,10 @@ export namespace PlanFollowup {
 
     // Fall back to plan file on disk
     const session = await PlanFollowupRuntime.session((svc) => svc.get(SessionID.make(input.sessionID)))
-    const file = Bun.file(Session.plan(session, Instance.current))
-    const plan = await file.text().catch(() => "")
+    const file = planFile(input.messages) ?? Session.plan(session, Instance.current)
+    const plan = await Bun.file(path.isAbsolute(file) ? file : path.join(Instance.worktree, file))
+      .text()
+      .catch(() => "")
     return plan.trim()
   }
 
@@ -339,6 +355,7 @@ export namespace PlanFollowup {
   async function startNew(input: {
     sessionID: SessionID
     plan: string
+    file?: string
     messages: MessageV2.WithParts[]
     model: MessageV2.User["model"]
     abort?: AbortSignal
@@ -369,7 +386,7 @@ export namespace PlanFollowup {
           })
 
         try {
-          const file = Session.plan(session, Instance.current)
+          const file = input.file ?? Session.plan(session, Instance.current)
           const todos = await PlanFollowupRuntime.todo.get(input.sessionID)
           const todoList = formatTodos(todos)
 
@@ -506,6 +523,7 @@ export namespace PlanFollowup {
       await startNew({
         sessionID: input.sessionID,
         plan,
+        file: planFile(input.messages),
         messages: input.messages,
         model: user.model,
         abort: input.abort,
