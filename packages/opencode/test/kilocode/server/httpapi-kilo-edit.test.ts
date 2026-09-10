@@ -4,7 +4,7 @@ import { HttpRouter } from "effect/unstable/http"
 import { HEADER_FEATURE, HEADER_ORGANIZATIONID } from "@kilocode/kilo-gateway"
 import * as Log from "@opencode-ai/core/util/log"
 import { KiloGatewayPaths } from "../../../src/kilocode/server/httpapi/groups/kilo-gateway"
-import { ExperimentalHttpApiServer } from "../../../src/server/routes/instance/httpapi/server"
+import * as HttpApiServer from "../../../src/server/routes/instance/httpapi/server"
 import { resetDatabase } from "../../fixture/db"
 import { disposeAllInstances, tmpdir } from "../../fixture/fixture"
 
@@ -30,7 +30,16 @@ const edit = {
 
 function app() {
   const handler = HttpRouter.toWebHandler(
-    ExperimentalHttpApiServer.routes.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({})))),
+    // kilocode_change - keep the filewatcher-disable flag visible (see httpapi-instance-route-auth.test.ts)
+    HttpApiServer.routes.pipe(
+      Layer.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromUnknown({
+            KILO_EXPERIMENTAL_DISABLE_FILEWATCHER: process.env.KILO_EXPERIMENTAL_DISABLE_FILEWATCHER ?? "true",
+          }),
+        ),
+      ),
+    ),
     { disableLogger: true },
   ).handler
 
@@ -38,7 +47,7 @@ function app() {
     request(input: string | URL | Request, init?: RequestInit) {
       return handler(
         input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init),
-        ExperimentalHttpApiServer.context,
+        HttpApiServer.context,
       )
     },
   }

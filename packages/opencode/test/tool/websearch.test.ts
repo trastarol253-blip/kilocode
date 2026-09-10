@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { parseResponse } from "../../src/tool/mcp-websearch"
 import { selectWebSearchProvider, webSearchModelName, webSearchProviderLabel } from "../../src/tool/websearch"
-import { ProviderID } from "../../src/provider/schema"
+
 import { webSearchEnabled } from "../../src/tool/registry"
+import { it } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const SESSION_ID = "ses_0196aabbccddeeff001122334455"
 
@@ -13,18 +15,11 @@ describe("websearch provider", () => {
   })
 
   test("supports an operational override", () => {
-    const original = process.env.KILO_WEBSEARCH_PROVIDER
-
-    try {
-      process.env.KILO_WEBSEARCH_PROVIDER = "parallel"
-      expect(selectWebSearchProvider(SESSION_ID)).toBe("parallel")
-
-      process.env.KILO_WEBSEARCH_PROVIDER = "exa"
-      expect(selectWebSearchProvider(SESSION_ID)).toBe("exa")
-    } finally {
-      if (original === undefined) delete process.env.KILO_WEBSEARCH_PROVIDER
-      else process.env.KILO_WEBSEARCH_PROVIDER = original
-    }
+    // kilocode_change start - the override is resolved via Env.Service by the tool and passed in
+    expect(selectWebSearchProvider(SESSION_ID, undefined, "parallel")).toBe("parallel")
+    expect(selectWebSearchProvider(SESSION_ID, undefined, "exa")).toBe("exa")
+    expect(selectWebSearchProvider(SESSION_ID, undefined, "bogus")).toBe(selectWebSearchProvider(SESSION_ID))
+    // kilocode_change end
   })
 
   test("routes to Exa when the Exa flag is enabled", () => {
@@ -37,11 +32,11 @@ describe("websearch provider", () => {
 
   test("is only enabled for kilo or explicit websearch provider flags", () => {
     // kilocode_change
-    expect(webSearchEnabled(ProviderID.kilo, { exa: false, parallel: false })).toBe(true) // kilocode_change
-    expect(webSearchEnabled(ProviderID.opencode, { exa: false, parallel: false })).toBe(false) // kilocode_change
-    expect(webSearchEnabled(ProviderID.openai, { exa: false, parallel: false })).toBe(false)
-    expect(webSearchEnabled(ProviderID.openai, { exa: true, parallel: false })).toBe(true)
-    expect(webSearchEnabled(ProviderID.openai, { exa: false, parallel: true })).toBe(true)
+    expect(webSearchEnabled(ProviderV2.ID.kilo, { exa: false, parallel: false })).toBe(true) // kilocode_change
+    expect(webSearchEnabled(ProviderV2.ID.opencode, { exa: false, parallel: false })).toBe(false) // kilocode_change
+    expect(webSearchEnabled(ProviderV2.ID.openai, { exa: false, parallel: false })).toBe(false)
+    expect(webSearchEnabled(ProviderV2.ID.openai, { exa: true, parallel: false })).toBe(true)
+    expect(webSearchEnabled(ProviderV2.ID.openai, { exa: false, parallel: true })).toBe(true)
   })
 
   test("uses branded labels", () => {
@@ -76,17 +71,24 @@ describe("websearch MCP response parser", () => {
     },
   })
 
-  test("parses plain JSON-RPC responses", async () => {
-    await expect(Effect.runPromise(parseResponse(payload))).resolves.toBe("search results")
-  })
+  it.effect("parses plain JSON-RPC responses", () =>
+    Effect.gen(function* () {
+      const result = yield* parseResponse(payload)
+      expect(result).toBe("search results")
+    }),
+  )
 
-  test("parses SSE JSON-RPC responses", async () => {
-    await expect(Effect.runPromise(parseResponse(`event: message\ndata: ${payload}\n\n`))).resolves.toBe(
-      "search results",
-    )
-  })
+  it.effect("parses SSE JSON-RPC responses", () =>
+    Effect.gen(function* () {
+      const result = yield* parseResponse(`event: message\ndata: ${payload}\n\n`)
+      expect(result).toBe("search results")
+    }),
+  )
 
-  test("ignores non-JSON SSE data frames", async () => {
-    await expect(Effect.runPromise(parseResponse(`data: [DONE]\ndata: ${payload}\n\n`))).resolves.toBe("search results")
-  })
+  it.effect("ignores non-JSON SSE data frames", () =>
+    Effect.gen(function* () {
+      const result = yield* parseResponse(`data: [DONE]\ndata: ${payload}\n\n`)
+      expect(result).toBe("search results")
+    }),
+  )
 })

@@ -1,7 +1,7 @@
 import { For, Show } from "solid-js"
-import { Tag } from "@kilocode/kilo-web-ui/tag"
 import { useConfig } from "../../context/config"
-import { ConfigPage, ConfigToolbar } from "./ConfigPage"
+import { ConfigPage, ConfigTag as Tag, ConfigToolbar } from "./ConfigPage"
+import "../../styles/sources.css"
 
 export function SourcesRoute() {
   const ctx = useConfig()
@@ -14,7 +14,9 @@ export function SourcesRoute() {
           <ConfigToolbar
             title="Load Order"
             description="Load order and editability without exposing secret values."
-            meta={<Tag>{data().overlay.targets.active ?? "Read only"}</Tag>}
+            meta={
+              <Tag>{data().overlay.targets.active.writable ? data().overlay.targets.active.scope : "Read only"}</Tag>
+            }
           />
 
           <div class="table" role="table" aria-label="Config sources">

@@ -2,10 +2,10 @@ import { For, Show } from "solid-js"
 import { Button } from "@kilocode/kilo-web-ui/button"
 import { ConfigRow, SectionTitle } from "@kilocode/kilo-web-ui/console"
 import { IconButton } from "@kilocode/kilo-web-ui/icon-button"
-import { CountTag, Tag } from "@kilocode/kilo-web-ui/tag"
 import { SearchField } from "../../components/SearchField"
-import { ConfigPage, SourceBadge } from "./ConfigPage"
+import { ConfigCountTag as CountTag, ConfigPage, ConfigTag as Tag, SourceBadge } from "./ConfigPage"
 import { useKeybindSettings } from "./state/keybinds"
+import "../../styles/keybinds.css"
 
 export function KeybindsRoute() {
   const state = useKeybindSettings()

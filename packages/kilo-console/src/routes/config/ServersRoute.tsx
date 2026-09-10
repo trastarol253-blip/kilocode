@@ -1,9 +1,9 @@
 import { Button } from "@kilocode/kilo-web-ui/button"
 import { Card } from "@kilocode/kilo-web-ui/card"
-import { Tag } from "@kilocode/kilo-web-ui/tag"
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { useConfig } from "../../context/config"
-import { ConfigPage, ConfigToolbar } from "./ConfigPage"
+import { ConfigPage, ConfigTag as Tag, ConfigToolbar } from "./ConfigPage"
+import "../../styles/servers.css"
 
 type Server = {
   id: string
